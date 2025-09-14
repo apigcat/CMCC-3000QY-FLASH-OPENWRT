@@ -1,0 +1,2 @@
+# CMCC-3000QY-FLASH-OPENWRT
+便宜买的刷openwrt

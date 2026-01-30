@@ -48,28 +48,23 @@ run_reboot()
 {
     local enable
     config_get_bool enable $1 enable
-
     if [ $enable = 1 ]; then
         local minute
         local hour
         config_get week $1 week
         config_get minute $1 minute
-        config_get hour $1 hour
-        
+        config_get hour $1 hour        
         # 问题1：格式处理逻辑不完整
         if [ $minute = 0 ] ; then
             minute="00"  # 仅处理0，其他单数字没处理
-        fi
-        
+        fi        
         # 问题2：week=7转*后，后续echo又使用$week变量
         if [ $week = 7 ] ; then
             week="*"  # 变量被覆盖，但下面echo仍用$week
-        fi
-        
+        fi      
         # 问题3：每次都清理重启任务，可能导致其他脚本的任务也被清理
         sed -i '/reboot/d' /etc/crontabs/root >/dev/null 2>&1
-        /etc/init.d/cron restart  # 频繁重启cron服务
-        
+        /etc/init.d/cron restart  # 频繁重启cron服务        
         # 问题4：硬编码sleep 5可能不够，reboot可能失败
         echo "$minute $hour * * $week sleep 5 && touch /etc/banner && reboot" >> /etc/crontabs/root
         echo "Auto REBOOT has started."
@@ -107,41 +102,39 @@ validate_time() {
 
 configure_cron_job() {
     local enable minute hour week cron_week
-    
-    config_get_bool enable "$1" enable 0
+        config_get_bool enable "$1" enable 0
     [ $enable -eq 0 ] && return
-    
-    config_get minute "$1" minute 30
+     config_get minute "$1" minute 30
     config_get hour "$1" hour 4
     config_get week "$1" week 7
     
-    # 验证时间参数
-    validate_time "$minute" || minute=30
-    [ "$hour" -ge 0 -a "$hour" -le 23 ] 2>/dev/null || hour=4
+# 验证时间参数
+  validate_time "$minute" || minute=30
+ [ "$hour" -ge 0 -a "$hour" -le 23 ] 2>/dev/null || hour=4
     
-    # 格式化分钟（crontab要求两位）
-    [ ${#minute} -eq 1 ] && minute="0$minute"
+ # 格式化分钟（crontab要求两位）
+[ ${#minute} -eq 1 ] && minute="0$minute"
     
-    # 星期转换（7表示每天）
-    [ "$week" = "7" ] && cron_week="*" || cron_week="$week"
+ # 星期转换（7表示每天）
+ [ "$week" = "7" ] && cron_week="*" || cron_week="$week"
+
+ # 只清理本脚本添加的任务（通过唯一标识）
+ sed -i '/#AUTOREBOOT#/d' /etc/crontabs/root
     
-    # 只清理本脚本添加的任务（通过唯一标识）
-    sed -i '/#AUTOREBOOT#/d' /etc/crontabs/root
+ # 添加新任务（带唯一标识）
+  echo "$minute $hour * * $cron_week sleep 60 && reboot #AUTOREBOOT#" >> /etc/crontabs/root
     
-    # 添加新任务（带唯一标识）
-    echo "$minute $hour * * $cron_week sleep 60 && reboot #AUTOREBOOT#" >> /etc/crontabs/root
-    
-    logger "Autoreboot scheduled: $minute:$hour (week:$week)"
+  logger "Autoreboot scheduled: $minute:$hour (week:$week)"
 }
 
 start_service() {
     [ -f /etc/config/autoreboot ] || return 0
     
-    config_load autoreboot
-    config_foreach configure_cron_job login
+  config_load autoreboot
+  config_foreach configure_cron_job login
     
-    # 仅当crontab有变化时才重启服务
-    crontab -l | grep -q "#AUTOREBOOT#" && /etc/init.d/cron restart
+  # 仅当crontab有变化时才重启服务
+  crontab -l | grep -q "#AUTOREBOOT#" && /etc/init.d/cron restart
 }
 
 stop_service() {
